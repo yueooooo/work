@@ -1,0 +1,209 @@
+#还有一种情况没考虑到就是    3569975107没有绑定sku是空的
+
+import requests
+import json
+from datetime import datetime
+import os
+def get_lastweek_buyershow(lastweek_orders):
+    # 筛选只包含不重复SKU的订单
+    global unique_sku
+    # seen_sku=unique_sku
+    unique_sku_orders = []
+    for order_data in lastweek_orders:
+        # is_unique = True  # 记录是否包含不重复的SKU
+        if order_data["SKU"] in unique_sku:
+            pass
+            # is_unique = False  # 如果SKU已经出现过，则设置is_unique为False
+        else:
+            unique_sku.add(order_data["SKU"])  # 将新出现的SKU添加到seen_sku集合中
+        # if is_unique:
+            unique_sku_orders.append(order_data)
+        # seen_sku.clear()  # 清空seen_sku集合，为下一个订单做准备
+
+    #输出筛选结果
+    print(unique_sku_orders)
+    for o in unique_sku_orders:
+        print(o["BuyerName"]+'-'+o["OrderNo"])
+        # creat_folder(o["BuyerName"]+'-'+o["OrderNo"], o["SKU"])
+
+
+
+#shopIds\":[\"546\"], lcb
+
+#获取500条刷单记录
+def get_shuadan(token,cookie):
+    url = "http://vg.vogocmerp.com:6969/api/order/orderListPage"
+    payload = "{\"pageSize\":\"500\",\"currentPage\":1,\"shopIds\":[\"546\"],\"logisticsModeId\":\"\",\"selectType\":\"contain\",\"orderNo\":\"\",\"country\":\"\",\"parcelNo\":\"\",\"waybillNo\":\"\",\"productSku\":\"\",\"productId\":\"\",\"buyerId\":\"\",\"orderBys\":\"2\",\"orderType\":2}"
+    headers = {
+        'Connection': 'keep-alive',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+        'token': token,
+        'Content-Type': 'application/json;',
+        'Origin': 'http://vg.vogocmerp.com:6969',
+        'Referer': 'http://vg.vogocmerp.com:6969/modules/order/list/brush_one_order.html',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Cookie': cookie
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+    return response.json()["datas"]
+
+
+#获取所有订单的信息(sku,buyname,ordertime,orderno)
+def get_all_orderInfo(shuadan_data):
+    result = []  # 存储提取的结果
+    for order in shuadan_data:
+        str1 = order["waybills"][0]["products"][0]["shopSku"]
+        try:
+            sku=str1.split('-')[0] + '-' + str1.split('-')[1] + '-' + str1.split('-')[2]
+            buyername = order["buyerInfo"]["buyerName"]
+            ordertime = order["orderTime"][:10]
+            orderNo = order["orderNo"]
+
+            # 创建包含提取数据的字典
+            order_dict = {
+                "SKU": sku,
+                "BuyerName": buyername,
+                "OrderTime": ordertime,
+                "OrderNo": orderNo
+            }
+
+            # 将订单字典添加到结果列表中
+            result.append(order_dict)
+        except:
+            sku=str1
+            buyername = order["buyerInfo"]["buyerName"]
+            ordertime = order["orderTime"][:10]
+            orderNo = order["orderNo"]
+
+            # 创建包含提取数据的字典
+            order_dict = {
+                "SKU": sku,
+                "BuyerName": buyername,
+                "OrderTime": ordertime,
+                "OrderNo": orderNo
+            }
+
+            # 将订单字典添加到结果列表中
+            result.append(order_dict)
+    return result
+
+
+#根据时间筛选出订单信息
+def filter_time(start,end,orders):
+    start_date = datetime.strptime(start, '%Y-%m-%d')
+    end_date = datetime.strptime(end, '%Y-%m-%d')
+    filtered_orders = [order for order in orders if  start_date <= datetime.strptime(order['OrderTime'][:10], '%Y-%m-%d') <= end_date]
+    return filtered_orders
+
+
+
+
+#登录获取token和JSESSIONID     cookie=token+JSESSIONID
+def login():
+  url = "http://vg.vogocmerp.com:6969/api/login"
+
+  payload = json.dumps({
+    "userName": "111",
+    "password": "222"
+  })
+  headers = {
+    'Connection': 'keep-alive',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'X-Requested-With': 'XMLHttpRequest',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+    'Content-Type': 'application/json',
+    'Origin': 'http://vg.vogocmerp.com:6969',
+    'Referer': 'http://vg.vogocmerp.com:6969/login.html?service=http://vg.vogocmerp.com:6969/modules/product/main/product_info.html?spuCode=114-34T9JC',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload)
+
+  data=response.json()
+  return(data["msg"],("JSESSIONID="+data["msg"]+";JSESSIONID="+response.cookies.get_dict()["JSESSIONID"]))
+
+
+
+
+#提取唯一的订单信息
+def get_unique_sku(order_data):
+    allsku=[]
+    for order in order_data:
+        allsku.append(order["SKU"])
+
+    return set(allsku)
+
+
+def write_cookie(token,cookie):
+    data={"token":token,"cookie":cookie}
+    with open("cookie.txt","w") as f:
+        f.write(json.dumps(data))
+
+def read_cookie():
+    with open("cookie.txt","r") as f:
+        data=f.read()
+    return json.loads(data)
+
+
+#获取页数
+def get_page(token,cookie,shopid):
+    url = "http://vg.vogocmerp.com:6969/api/order/orderListPage"
+    payload = {'pageSize': '500', 'currentPage': "1", 'shopIds': [str(shopid)], 'logisticsModeId': '',
+               'selectType': 'contain', 'orderNo': '', 'country': '', 'parcelNo': '', 'waybillNo': '', 'productSku': '',
+               'productId': '', 'buyerId': '', 'orderBys': '2'}
+
+    headers = {
+        'Connection': 'keep-alive',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+        'token': token,
+        'Content-Type': 'application/json;',
+        'Origin': 'http://vg.vogocmerp.com:6969',
+        'Referer': 'http://vg.vogocmerp.com:6969/modules/order/list/all_order.html',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Cookie': cookie
+    }
+
+    response = requests.request("POST", url, headers=headers, data=json.dumps(payload))
+    return int(response.json()["pop"]["totalPages"])
+
+#创建文件夹并在文件夹里面放sku的txt文件
+def creat_folder(folder_name,sku_name):
+    if not os.path.exists(folder_name):
+        os.mkdir(folder_name)
+    filepath = os.path.join(folder_name, sku_name)
+    with open(filepath, 'w') as file:
+        file.write('')
+
+
+if __name__=='__main__':
+    # 提取上周刷单的sku，如果没重复的就加入列表中
+    #根据列表创建文件夹
+
+    # 提取所有订单信息
+    try:
+        cookieInfo=read_cookie()
+        shuadan_data=get_shuadan(cookieInfo["token"],cookieInfo["cookie"])
+        result = get_all_orderInfo(shuadan_data)
+    except:
+        token, cookie = login()
+        write_cookie(token, cookie)
+        #所有订单信息
+        shuadan_data = get_shuadan(token, cookie)
+        # 四个订单信息
+        result = get_all_orderInfo(shuadan_data)
+
+    # 根据下单时间筛选除了上周之外的所有不重复的sku
+    filter_order_data=filter_time("2023-03-06", "2023-03-19", result)
+    unique_sku=get_unique_sku(filter_order_data)
+    print("unique_sku:",unique_sku)
+    #提取上周不重复的买家秀订单
+    # get_lastweek_buyershow(unique_sku, filter_time("2023-03-20", "2023-03-24", result))
+    get_lastweek_buyershow(filter_time("2023-03-20", "2023-03-24", result))
+
+
+
